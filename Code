@@ -1,0 +1,242 @@
+###########################################################################
+###############CREDIT CARD FRAUD ANALYSIS IN R#############################
+###############################
+#1.Introduction
+###############################
+
+#The dataset that I have analysed contains transactions made by credit cards in September 2013 
+#by european cardholders.This is a opensource dataset
+#Source: http://mlg.ulb.ac.be
+
+#To start with the loading of neccesary libraries to analyse the data
+
+library(unbalanced) # contains SMOTE method(oversamples by using bootstrapping and k-nearest neighbor 
+#to synthetically create additional observations)  to generate synthetic examples of the 
+#minority class in an unbalanced-class data set.
+library(readr) #for reading rectangular data like csv
+library(magrittr) #for chaining commands
+library(caret) #for classification and regression training    
+library(dplyr) #for manipulating data set
+library(e1071) #Functions for latent class analysis, short time Fourier transform, 
+#fuzzy clustering, support vector machines, shortest path computation...
+library(rattle) #Graphical User Interface for Data Mining
+library(ROCR) #for visualizing the Performance of Scoring Classifiers. ROC graphs, 
+#sensitivity/specificity curves, lift charts, and precision/recall plots
+library(randomForest) #for Classification and regression 
+library(rpart.plot) # for plotting rpart trees
+library(pROC) #for roc function
+library(stringi) #for Character String Processing Facilities
+
+#Now,that we have loaded necessary libraries to analyse for our data,Let us load the data
+
+credit <- read.csv("C:/Users/Maddy/Desktop/Kaggle/Creditcard/creditcard.csv")
+#Our data is approximately 144MB ,so it will take few seconds instead of loading immediately
+#To check the structure of our data,we can use str()
+str(credit)
+#'data.frame':	284807 obs. of  31 variables:
+# Time  : num  0 0 1 1 2 2 4 7 7 9 ...
+# V1    : num  -1.36 1.192 -1.358 -0.966 -1.158 ...
+# V2    : num  -0.0728 0.2662 -1.3402 -0.1852 0.8777 ...
+# V3    : num  2.536 0.166 1.773 1.793 1.549 ...
+# V4    : num  1.378 0.448 0.38 -0.863 0.403 ...
+# V5    : num  -0.3383 0.06 -0.5032 -0.0103 -0.4072 ...
+# V6    : num  0.4624 -0.0824 1.8005 1.2472 0.0959 ...
+# V7    : num  0.2396 -0.0788 0.7915 0.2376 0.5929 ...
+# V8    : num  0.0987 0.0851 0.2477 0.3774 -0.2705 ...
+# V9    : num  0.364 -0.255 -1.515 -1.387 0.818 ...
+# V10   : num  0.0908 -0.167 0.2076 -0.055 0.7531 ...
+# V11   : num  -0.552 1.613 0.625 -0.226 -0.823 ...
+# V12   : num  -0.6178 1.0652 0.0661 0.1782 0.5382 ...
+# V13   : num  -0.991 0.489 0.717 0.508 1.346 ...
+# V14   : num  -0.311 -0.144 -0.166 -0.288 -1.12 ...
+# V15   : num  1.468 0.636 2.346 -0.631 0.175 ...
+# V16   : num  -0.47 0.464 -2.89 -1.06 -0.451 ...
+# V17   : num  0.208 -0.115 1.11 -0.684 -0.237 ...
+# V18   : num  0.0258 -0.1834 -0.1214 1.9658 -0.0382 ...
+# V19   : num  0.404 -0.146 -2.262 -1.233 0.803 ...
+# V20   : num  0.2514 -0.0691 0.525 -0.208 0.4085 ...
+# V21   : num  -0.01831 -0.22578 0.248 -0.1083 -0.00943 ...
+# V22   : num  0.27784 -0.63867 0.77168 0.00527 0.79828 ...
+# V23   : num  -0.11 0.101 0.909 -0.19 -0.137 ...
+# V24   : num  0.0669 -0.3398 -0.6893 -1.1756 0.1413 ...
+# V25   : num  0.129 0.167 -0.328 0.647 -0.206 ...
+# V26   : num  -0.189 0.126 -0.139 -0.222 0.502 ...
+# V27   : num  0.13356 -0.00898 -0.05535 0.06272 0.21942 ...
+# V28   : num  -0.0211 0.0147 -0.0598 0.0615 0.2152 ...
+# Amount: num  149.62 2.69 378.66 123.5 69.99 ...
+# Class : int  0 0 0 0 0 0 0 0 0 0 ...
+
+#Explanation for variables: 1)Time: First and current transaction timing elapse 
+#2)V1...V28:Principal Componentsthrough PCA(Prinicipal Component Analysis(Dimensionality-reduction technique)-
+#To reduce the dimensionality of data or summarizing the data)
+#3)Amount:Transaction Amount 
+#4)Class: Response Variable(1-Fraud,0-Legal)
+
+#Since we have loaded the data,we should check whether it is balaced or not
+
+table(credit$Class)/nrow(credit)
+#          0           1 
+#0.998272514 0.001727486 
+
+#The output tells us the data is imbalanced.
+
+#To balace the data,we can use ubsMOTE() function from unbalanced library
+?ubSMOTE #synthetic minority over-sampling technique
+
+balance <- ubSMOTE(X = credit[,-31], Y = as.factor(credit$Class),
+                   perc.over=200, perc.under=800,  verbose=TRUE)
+
+balancedf <- cbind(balance$X, Class = balance$Y)
+
+table(balancedf$Class)/nrow(balancedf)
+#        0         1 
+#0.8421053 0.1578947
+
+#Now balancedf dataframe has balanced data
+
+####################################################
+#2.Visualization
+####################################################
+#We can plot the data and get more clarity
+pdf("credit.doc")
+for (i in seq(from =1, to = 30, by = 4))
+{
+  show(
+    featurePlot(
+      x = balancedf[, c(i+2,i+3,i,i+1)], 
+      y = balancedf$Class,plot = "density",
+      adjust = 1.5, pch = "|", layout = c(2,2 ), auto.key=TRUE
+    )
+  )
+}
+dev.off()
+#Outputs for our comparision is as below
+
+#As we can see from the plotting, columns v15,v20, v22,v24,v25 and v26 have less impact on our target. 
+#Hence, we will exclude these columns and divide the data into 80% and 20% as a part of training and testing data
+
+#3.Pre-processing the data
+newdata <-balancedf[,-c(16,21,23,25,26,27)]
+
+sample<- sample(2, nrow(newdata),
+                replace = T,
+                prob = c(0.8,0.2))
+train <- newdata[sample==1,]
+test <-newdata[sample==2,]
+
+#4.Modelling
+#Applying the randomforest algorithm to our balanced data 
+?randomForest()
+balancedf.rf <- randomForest(Class~.,
+                              train,
+                              ntree=300,
+                              importance=T, do.trace=T)
+balancedf.rf$confusion
+#    0    1 class.error
+#0 6204   10 0.001609269
+#1  117 1086 0.097256858
+plot(balancedf.rf)
+
+
+#
+#Variable importance plot is also a useful tool and can be plotted using varImpPlot function.
+# Top 5 variables are selected and plotted based on Model Accuracy and Gini value.
+varImpPlot(balancedf.rf,
+           sort = T,
+           main="Variable Importance",
+           n.var=5)
+var.imp <- data.frame(importance(balancedf.rf,
+                                 type=2))
+var.imp$Variables <- row.names(var.imp)
+
+Imp <- var.imp[order(var.imp$MeanDecreaseGini,decreasing = T),]
+head(Imp)
+#   MeanDecreaseGini Variables
+#V14         396.8361       V14
+#V10         266.3485       V10
+#V17         210.3685       V17
+#V11         208.0458       V11
+#V12         195.9173       V12
+#V3          106.6907        V3
+
+#Based on Random Forest variable importance, the variables could be selected for any other predictive modelling 
+#techniques or machine learning.
+
+v_pred <- predict(balancedf.rf ,test)
+
+confusionMatrix(v_pred,test$Class,
+                positive='1')
+#Confusion Matrix and Statistics
+
+#Reference
+#Prediction    0    1
+#0 1656   23
+#1    2  250
+
+#Accuracy : 0.9871          
+#95% CI : (0.9809, 0.9916)
+#No Information Rate : 0.8586          
+#P-Value [Acc > NIR] : < 2.2e-16       
+
+#Kappa : 0.9449          
+#Mcnemar's Test P-Value : 6.334e-05       
+                                          
+#            Sensitivity : 0.9158          
+#            Specificity : 0.9988          
+#         Pos Pred Value : 0.9921          
+#         Neg Pred Value : 0.9863          
+#             Prevalence : 0.1414          
+#         Detection Rate : 0.1295          
+#   Detection Prevalence : 0.1305          
+#      Balanced Accuracy : 0.9573          
+                                          
+#       'Positive' Class : 1 
+
+ctrl <- rpart.control(maxdepth=4)
+
+balancedf.rp <- rpart(    Class ~ .,
+                           balancedf,
+                           control=ctrl
+)
+
+fancyRpartPlot(balancedf.rp)
+
+traindata <- createDataPartition(balancedf$Class, p=0.8, list=FALSE)
+train80<- balancedf[traindata,]
+train20<- balancedf[-traindata,]
+class_pred<- predict(balancedf.rp, train20[, -c(31) ], type="class")
+confusionMatrix(class_pred, train20[,31],
+                positive = "1",dnn=c("predictions","actual"), 
+                mode="prec_recall")
+#Confusion Matrix and Statistics
+
+#actual
+#predictions    0    1
+#0 1567   42
+#1    7  253
+
+#Accuracy : 0.9738          
+#95% CI : (0.9655, 0.9805)
+#No Information Rate : 0.8422          
+#P-Value [Acc > NIR] : < 2.2e-16       
+
+#Kappa : 0.8964          
+#Mcnemar's Test P-Value : 1.191e-06       
+                                          
+#              Precision : 0.9731          
+#                 Recall : 0.8576          
+ #                    F1 : 0.9117          
+  #           Prevalence : 0.1578          
+   #      Detection Rate : 0.1354          
+   #Detection Prevalence : 0.1391          
+    #  Balanced Accuracy : 0.9266          
+                                          
+     #  'Positive' Class : 1   
+
+###AUC graph
+
+prob_predictions <- predict(balancedf.rp, train20[, -c(31) ], type="prob")
+
+df_roc<-roc(train20[,31],prob_predictions[,2])
+
+plot(df_roc,main="AUC" %s+% df_roc$auc)
